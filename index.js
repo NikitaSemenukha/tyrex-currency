@@ -44,7 +44,9 @@ function formatMessage(data) {
         const emoji = change >= 0 ? '📈' : '📉';
         text += `${index + 1}. **${coin.symbol.toUpperCase()}**: $${price} (${emoji} ${change}%)\n`;
     });
-    text += `\n🔄 _Обновлено: ${new Date().toLocaleTimeString('ru-RU', {timeZone: 'Europe/Moscow'})}_`;
+    
+    // Теперь время отображается по Киеву
+    text += `\n🔄 _Обновлено: ${new Date().toLocaleTimeString('ru-RU', {timeZone: 'Europe/Kyiv'})}_`;
     return text;
 }
 
