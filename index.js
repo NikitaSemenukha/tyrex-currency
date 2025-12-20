@@ -37,8 +37,21 @@ async function getCryptoData() {
 }
 
 function formatMessage(data) {
-    let text = `📊 **ТОП-10 Криптовалют (USD)**\n\n`;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Kyiv' });
+    const timeStr = now.toLocaleTimeString('ru-RU', { 
+        timeZone: 'Europe/Kyiv', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+
+    const btc = data.find(c => c.symbol.toLowerCase() === 'btc');
+    const btcPricePreview = btc ? btc.current_price.toLocaleString('en-US') : '';
+
+    let text = `📊 **АКТУАЛЬНЫЕ КУРСЫ (BTC: $${btcPricePreview})**\n`;
     
+    text += `📅 **Дата:** ${dateStr}\n\n`;
+
     data.forEach((coin, index) => {
         const price = coin.current_price.toLocaleString('en-US', { minimumFractionDigits: 2 });
         const change = coin.price_change_percentage_24h?.toFixed(2) || '0.00';
@@ -46,41 +59,8 @@ function formatMessage(data) {
         text += `${index + 1}. **${coin.symbol.toUpperCase()}**: $${price} (${emoji} ${change}%)\n`;
     });
 
-    // Новый формат: Часы:Минуты | Дата
-    const timestamp = new Date().toLocaleString('ru-RU', {
-        timeZone: 'Europe/Kyiv',
-        hour: '2-digit',
-        minute: '2-digit',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
+    text += `\n🔄 **Обновлено:** ${timeStr}\n`;
 
-    text += `\n🔄 _Обновлено: ${timestamp}_`;
-    return text;
-}
-
-function formatMessage(data) {
-    let text = `📊 **ТОП-10 Криптовалют (USD)**\n\n`;
-    
-    data.forEach((coin, index) => {
-        const price = coin.current_price.toLocaleString('en-US', { minimumFractionDigits: 2 });
-        const change = coin.price_change_percentage_24h?.toFixed(2) || '0.00';
-        const emoji = change >= 0 ? '📈' : '📉';
-        text += `${index + 1}. **${coin.symbol.toUpperCase()}**: $${price} (${emoji} ${change}%)\n`;
-    });
-
-    // Новый формат: Часы:Минуты | Дата
-    const timestamp = new Date().toLocaleString('ru-RU', {
-        timeZone: 'Europe/Kyiv',
-        hour: '2-digit',
-        minute: '2-digit',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
-
-    text += `\n🔄 _Обновлено: ${timestamp}_`;
     return text;
 }
 
