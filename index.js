@@ -2,17 +2,21 @@ const { Telegraf } = require('telegraf');
 const axios = require('axios');
 const express = require('express');
 
+// Настройки из переменных окружения Render
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
-const UPDATE_INTERVAL = 60000; 
+const UPDATE_INTERVAL = 60000; // 1 минута
 
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
-app.get('/', (req, res) => res.send('Bot is running'));
-app.listen(process.env.PORT || 3000);
 
-let messageId = null; // Храним ID последнего сообщения с курсом
+// Веб-сервер для Render (чтобы не засыпал)
+app.get('/', (req, res) => res.send('Crypto Bot is Alive!'));
+app.listen(process.env.PORT || 3000, () => console.log('Web server started'));
 
+let messageId = null; // Храним ID текущего сообщения с курсом
+
+// 1. Получение данных
 async function getData() {
     try {
         const cryptoRes = await axios.get('https://api.coingecko.com/api/v3/coins/markets', {
@@ -26,25 +30,21 @@ async function getData() {
     }
 }
 
+// 2. Форматирование текста
 function formatMessage(data) {
     const { crypto, fiat } = data;
 
-    // Данные крипты
     const btc = crypto.find(c => c.id === 'bitcoin');
     const eth = crypto.find(c => c.id === 'ethereum');
     const usdt = crypto.find(c => c.id === 'tether');
 
-    // Данные фиата
     const usdUah = fiat.UAH.toFixed(2);
     const usdRub = fiat.RUB.toFixed(2);
     const usdKzt = fiat.KZT.toFixed(2);
     const usdEur = fiat.EUR.toFixed(3);
 
-    // Функция для выбора эмодзи (📈/📉)
-    // Теперь она более гибкая
     const getEmoji = (change) => (change >= 0 ? '📈' : '📉');
 
-    // Время и дата (Киев)
     const now = new Date();
     const dateStr = now.toLocaleDateString('ru-RU', { timeZone: 'Europe/Kyiv' });
     const timeStr = now.toLocaleTimeString('ru-RU', { 
@@ -53,71 +53,82 @@ function formatMessage(data) {
         minute: '2-digit' 
     });
 
-    // --- ФОРМИРОВАНИЕ ТЕКСТА ---
-    
-    // 1. Биткоин в заголовке теперь с динамическим эмодзи
     let text = `<b>📊 КУРС. BTC: $${btc.current_price.toLocaleString('en-US')}</b> ${getEmoji(btc.price_change_percentage_24h)}\n\n`;
 
-    // 2. Секция Крипто
     text += `🔹 <b>ETH:</b> <code>$${eth.current_price.toLocaleString('en-US')}</code> ${getEmoji(eth.price_change_percentage_24h)}\n`;
     text += `🔹 <b>USDT:</b> <code>$${usdt.current_price.toFixed(2)}</code> ${getEmoji(usdt.price_change_percentage_24h)}\n\n`;
 
     text += `⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n\n`;
 
-    // 3. Секция Фиат (Валюты)
-    // Так как бесплатный API валют не дает % изменения, 
-    // мы можем либо оставить статичные эмодзи, либо (как в примере ниже)
-    // использовать функцию, если у вас появятся данные о росте/падении.
-    // Пока поставим вручную для примера, как это вызывается:
-    
-    text += `💵 <b>Грн до $:</b> <code>${usdUah}</code> ${getEmoji(-1)} \n`; // Пример: падение
-    text += `   <b>Руб до $:</b> <code>${usdRub}</code> ${getEmoji(1)} \n`;  // Пример: рост
-    text += `🇰🇿 <b>Тнг до $:</b> <code>${usdKzt}</code> ${getEmoji(1)} \n`;  // Пример: рост
-    text += `💶 <b>$ до €:</b>  <code>${usdEur}</code> ${getEmoji(-1)} \n\n`; // Пример: падение
+    text += `💵 <b>Грн до $:</b> <code>${usdUah}</code> 📉\n`; 
+    text += `💵 <b>Руб до $:</b> <code>${usdRub}</code> 📈\n`; 
+    text += `🇰🇿 <b>Тнг до $:</b> <code>${usdKzt}</code> 📈\n`; 
+    text += `💶 <b>$ до €:</b>  <code>${usdEur}</code> 📉\n\n`; 
 
-    // 4. Подвал
     text += `🗓 <b>Дата:</b> <code>${dateStr}</code>\n`;
     text += `🔄 <b>Обновлено:</b> <code>${timeStr}</code>\n`;
 
     return text;
 }
 
-// ГЛАВНАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ
-async function updatePost() {
+// 3. Основная функция обновления
+async function updatePost(forceResend = false) {
     const data = await getData();
     if (!data) return;
 
     const text = formatMessage(data);
 
     try {
-        
+        // Если нужно переотправить (например, админ что-то написал выше)
+        if (forceResend && messageId) {
+            try { await bot.telegram.deleteMessage(CHANNEL_ID, messageId); } catch(e) {}
+            messageId = null;
+        }
+
         if (messageId) {
+            // Если пост уже есть и он последний - просто редактируем
             await bot.telegram.editMessageText(CHANNEL_ID, messageId, null, text, { parse_mode: 'HTML' });
-            console.log('Данные обновлены (редактирование)');
+            console.log('Пост отредактирован');
         } else {
+            // Если поста нет - отправляем новый
             const msg = await bot.telegram.sendMessage(CHANNEL_ID, text, { 
                 parse_mode: 'HTML',
                 disable_notification: true 
             });
             messageId = msg.message_id;
+            console.log('Отправлен новый пост');
         }
     } catch (e) {
+        console.log('Ошибка обновления, пробуем переотправить...');
         messageId = null;
-        await updatePost();
+        // Если это была ошибка редактирования, в следующий раз отправит новый
     }
 }
 
+// 4. Слежка за новыми постами админа
 bot.on('channel_post', async (ctx) => {
-    if (ctx.channelPost.sender_chat?.id.toString() === CHANNEL_ID || ctx.channelPost.chat.id.toString() === CHANNEL_ID) {
-        if (!ctx.channelPost.text || !ctx.channelPost.text.includes('📊 КУРС.')) {
-            console.log('Админ что-то запостил, переносим курс вниз...');
-            await updatePost();
+    const chatId = String(ctx.channelPost.chat.id);
+    const configId = String(CHANNEL_ID);
+
+    // Если пост в нашем канале и это НЕ наш бот обновился
+    if (chatId === configId) {
+        const text = ctx.channelPost.text || "";
+        if (!text.includes('📊 КУРС.')) {
+            console.log('Админ опубликовал пост. Переносим курс вниз...');
+            await updatePost(true); // Вызываем принудительную переотправку
         }
     }
 });
 
-setInterval(updatePost, UPDATE_INTERVAL);
-bot.launch().then(() => console.log('Бот запущен...'));
+// Запуск цикла
+setInterval(() => updatePost(false), UPDATE_INTERVAL);
 
+// Первый запуск при старте скрипта
+bot.launch().then(() => {
+    console.log('Бот запущен!');
+    updatePost(false);
+});
+
+// Вежливое выключение
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
